@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -41,11 +44,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer file.Close()
-	mediaType := header.Header.Get("Content-Type")
 
-	image, err := io.ReadAll(file)
+	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't read image data", err)
+		respondWithError(w, http.StatusBadRequest, "Invalid Content-Type", err)
+		return
+	}
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", nil)
 		return
 	}
 
@@ -60,12 +66,21 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	videoThumbnails[videoID] = thumbnail{
-		data:      image,
-		mediaType: mediaType,
+	assetPath := getAssetPath(mediaType)
+	assetDiskPath := filepath.Join(cfg.assetsRoot, assetPath)
+
+	newFile, err := os.Create(assetDiskPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create new file", err)
+		return
+	}
+	defer newFile.Close()
+	if _, err = io.Copy(newFile, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't copy file", err)
+		return
 	}
 
-	thumbnailURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID)
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, assetPath)
 	video.ThumbnailURL = &thumbnailURL
 
 	if err = cfg.db.UpdateVideo(video); err != nil {
