@@ -80,7 +80,7 @@ func main() {
 		log.Fatal("PORT environment variable is not set")
 	}
 
-	sdkCfg, err := config.LoadDefaultConfig(context.TODO())
+	sdkCfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		log.Fatalf("failed loading SDK config, %v", err)
 	}
